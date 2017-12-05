@@ -12,7 +12,7 @@ const (
 	PATCHNOTES
 )
 
-// Article Table columns
+// Article table const
 const (
 	ArticleTable     = "kr-articles"
 	ArticleTypeCol   = "article-type"
@@ -24,11 +24,11 @@ const (
 
 // Article representing a published article on PLUG Cafe
 type Article struct {
-	Type       ArticleType `dynamo:article-type` // primary partition key
-	ID         int         `dynamo:article-id`   // primary sort key
-	Title      string      `dynamo:title`
-	Desc       string      `dynamo:description`
-	ImgURL     string      `dynamo:thumb-url`
-	CreatedOn  time.Time   `dynamo:created-on`
-	ModifiedOn time.Time   `dynamo:modified-on`
+	ID         int         `dynamo:"article-id",json:"article_id"`     // primary partition key
+	Type       ArticleType `dynamo:"article-type",json:"article_type"` // primary sort key
+	Title      string      `dynamo:"article-title",json:"article_title"`
+	Desc       string      `dynamo:"article-description",json:"article_description"`
+	ImgURL     string      `dynamo:"article-thumb-url",json:"article_thumb_url"`
+	CreatedOn  time.Time   `dynamo:"created-on",json:"-"`
+	ModifiedOn time.Time   `dynamo:"modified-on",json:"-"`
 }

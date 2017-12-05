@@ -1,17 +1,21 @@
-package main
+package crawler
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/sirupsen/logrus"
-	"fmt"
-	"strings"
+	"github.com/xeia/Kings-Raid-Crawler/models"
+	"io"
 	"regexp"
+	"strconv"
+	"strings"
 )
 
 const (
-	cafeBase = "https://www.plug.game/kingsraid-en"
-	noticesUrl = cafeBase + "/posts?menuId=1#"
-	eventsUrl = cafeBase + "/posts?menuId=2#"
+	cafeBase      = "https://www.plug.game/kingsraid-en"
+	noticesUrl    = cafeBase + "/posts?menuId=1#"
+	eventsUrl     = cafeBase + "/posts?menuId=2#"
 	patchNotesUrl = cafeBase + "/posts?menuId=9#"
 
 	contentsSelector = "#data-container"
@@ -23,44 +27,70 @@ var (
 )
 
 // ScrapeNotices returns all notices loaded on the page into an Article slice
-func ScrapeNotices() {
-	scrape(noticesUrl)
+func ScrapeNotices() ([]models.Article, string) {
+	return scrape(noticesUrl, models.NOTICE)
 }
 
 // ScrapeEvents returns all events loaded on the page into an Article slice
-func ScrapeEvents() {
-	scrape(eventsUrl)
+func ScrapeEvents() ([]models.Article, string) {
+	return scrape(eventsUrl, models.EVENTS)
 }
 
 // ScrapePatchNotes returns all patch notes loaded on the page into an Article slice
-func ScrapePatchNotes() {
-	scrape(patchNotesUrl)
+func ScrapePatchNotes() ([]models.Article, string) {
+	return scrape(patchNotesUrl, models.PATCHNOTES)
 }
 
-func scrape(url string) {
+func scrape(url string, typ models.ArticleType) ([]models.Article, string) {
 	doc, err := goquery.NewDocument(url)
 	if err != nil {
 		logrus.Fatal(err)
 	}
-	doc.Find(contentsSelector).Find(articlesSelector).Each(func(i int, s *goquery.Selection) {
+
+	var articles []models.Article
+
+	articleSelection := doc.Find(contentsSelector).Find(articlesSelector)
+	cHash := getContentsHash(articleSelection.Text())
+
+	articleSelection.Each(func(i int, s *goquery.Selection) {
+		article := models.Article{Type: typ}
+
 		articleId, exist := s.Attr("data-articleid")
 		if exist {
-			fmt.Println(articleId)
+			article.ID = convertArticleId(articleId)
 		}
-		article := s.Find("a.link_feed")
-		articleContents := article.Find(".preview_text")
-		articleTitle := strings.TrimSpace(articleContents.Find("strong.tit_feed").Text())
-		articleDetails := strings.TrimSpace(articleContents.Find("p.txt_feed").Text())
-		fmt.Println(articleTitle)
-		fmt.Println(articleDetails)
-		imgSelector, exist := article.Find(".preview_feed").Find("div.img").Attr("style")
+
+		feed := s.Find("a.link_feed")
+		feedContents := feed.Find(".preview_text")
+
+		articleTitle := strings.TrimSpace(feedContents.Find("strong.tit_feed").Text())
+		article.Title = articleTitle
+
+		articleDetails := strings.TrimSpace(feedContents.Find("p.txt_feed").Text())
+		article.Desc = articleDetails
+
+		imgSelector, exist := feed.Find(".preview_feed").Find("div.img").Attr("style")
 		if exist {
 			articleImg := bgImgRegex.FindStringSubmatch(imgSelector)[1]
-			fmt.Println(articleImg)
+			article.ImgURL = articleImg
 		}
+
+		articles = append(articles, article)
 	})
+
+	return articles, cHash
 }
 
-func main() {
-	ScrapePatchNotes()
+func convertArticleId(id string) int {
+	i, err := strconv.Atoi(id)
+	if err != nil {
+		return -1
+	}
+	return i
+}
+
+func getContentsHash(contents string) string {
+	h := sha1.New()
+	io.WriteString(h, contents)
+	return hex.EncodeToString(h.Sum(nil))
 }
