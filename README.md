@@ -24,9 +24,12 @@
 - Golang 1.9
 - AWS Lambda, CloudWatch, DynamoDB
 - Telegram Bot
-- [Up](https://up.docs.apex.sh)
+- [Sparta](http://gosparta.io)
+- [goquery] (https://godoc.org/github.com/PuerkitoBio/goquery)
 
 ### Process
+0. Setup requirements
+1. Clone this repo
 > Build 
 
 ## Future
