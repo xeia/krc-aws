@@ -25,7 +25,7 @@
 - AWS Lambda, CloudWatch, DynamoDB
 - Telegram Bot
 - [Sparta](http://gosparta.io)
-- [goquery] (https://godoc.org/github.com/PuerkitoBio/goquery)
+- [goquery](https://godoc.org/github.com/PuerkitoBio/goquery)
 
 ### Process
 0. Setup requirements
