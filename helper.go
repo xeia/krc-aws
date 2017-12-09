@@ -1,18 +1,18 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
-	"github.com/mweagle/Sparta/aws/dynamodb"
-	"github.com/xeia/Kings-Raid-Crawler/models"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/guregu/dynamo"
-	"time"
-	"strings"
-	"net/http"
-	"encoding/json"
-	"os"
+	"github.com/mweagle/Sparta/aws/dynamodb"
 	"github.com/xeia/Kings-Raid-Crawler/crawler"
-	"bytes"
+	"github.com/xeia/Kings-Raid-Crawler/models"
+	"net/http"
+	"os"
+	"strings"
+	"time"
 )
 
 func discordHook(ev dynamodb.Event) error {
@@ -27,7 +27,7 @@ func discordHook(ev dynamodb.Event) error {
 	embed.Color = 3447003
 	embed.URL = crawler.CafeBase
 
-	b, _:= json.Marshal(&ev)
+	b, _ := json.Marshal(&ev)
 	embed.Fields = []models.DiscordField{
 		{Name: "Test", Value: string(b)},
 	}

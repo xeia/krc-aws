@@ -1,31 +1,32 @@
 package main
 
 import (
+	"encoding/json"
 	"github.com/mweagle/Sparta"
 	"github.com/mweagle/Sparta/aws/dynamodb"
+	"github.com/Sirupsen/logrus"
 	"github.com/xeia/Kings-Raid-Crawler/crawler"
 	"github.com/xeia/Kings-Raid-Crawler/models"
 	"net/http"
-	"encoding/json"
-	"github.com/Sirupsen/logrus"
+	"os"
 )
 
 const (
-	envDynamoDB = "DYNAMO_DB"
-	envDynamoDBErr = "Env DYNAMO_DB does not exist"
+	envDynamoDBStream    = "DYNAMO_DBSTREAM"
+	envDynamoDBStreamErr = "Env DYNAMO_DBSTREAM does not exist"
 
 	envDiscordHook    = "DISCORD_WEBHOOK"
 	envDiscordHookErr = "Env DISCORD_WEBHOOK does not exist"
 	enableDiscordHook = true
 
-	envTelegram = "TELEGRAM_TOKEN"
+	envTelegram    = "TELEGRAM_TOKEN"
 	envTelegramErr = "Env TELEGRAM_TOKEN does not exist"
 	enableTelegram = false
 )
 
 const (
-	dbWriteErr = "error writing to db"
-	dbReadErr  = "error reading from db"
+	dbWriteErr   = "error writing to db"
+	dbReadErr    = "error reading from db"
 	eventReadErr = "error unmarshalling event data: "
 
 	requestReceived = "Request received"
@@ -48,12 +49,12 @@ func handleNewArticles(w http.ResponseWriter, r *http.Request) {
 	err := decoder.Decode(&lambdaEvent)
 	if err != nil {
 		logger.Error(eventReadErr, err.Error())
-		writeRespHeaderWithMsg(w, http.StatusInternalServerError, eventReadErr + err.Error())
+		writeRespHeaderWithMsg(w, http.StatusInternalServerError, eventReadErr+err.Error())
 	}
 
 	for _, rec := range lambdaEvent.Records {
 		logger.WithFields(logrus.Fields{
-			"Keys": rec.DynamoDB.Keys,
+			"Keys":     rec.DynamoDB.Keys,
 			"NewImage": rec.DynamoDB.NewImage,
 		}).Info("DynamoDB event")
 	}
@@ -91,7 +92,7 @@ func scrapeAll(w http.ResponseWriter, r *http.Request) {
 		result = append(result, eventsArticles...)
 		for _, article := range eventsArticles {
 			logger.WithFields(logrus.Fields{
-				"ArticleID": article.ID,
+				"ArticleID":    article.ID,
 				"ArticleTitle": article.Title,
 			}).Info("ScrapeAll Events")
 		}
@@ -102,7 +103,7 @@ func scrapeAll(w http.ResponseWriter, r *http.Request) {
 		result = append(result, noticeArticles...)
 		for _, article := range noticeArticles {
 			logger.WithFields(logrus.Fields{
-				"ArticleID": article.ID,
+				"ArticleID":    article.ID,
 				"ArticleTitle": article.Title,
 			}).Info("ScrapeAll Notices")
 		}
@@ -113,7 +114,7 @@ func scrapeAll(w http.ResponseWriter, r *http.Request) {
 		result = append(result, patchNotesArticles...)
 		for _, article := range patchNotesArticles {
 			logger.WithFields(logrus.Fields{
-				"ArticleID": article.ID,
+				"ArticleID":    article.ID,
 				"ArticleTitle": article.Title,
 			}).Info("ScrapeAll Patch Notes")
 		}
@@ -220,6 +221,19 @@ func spartaLambdaFunctions(api *sparta.API) []*sparta.LambdaAWSInfo {
 
 	scrapePatchNotesFn := sparta.HandleAWSLambda("Scrape Patch Notes", http.HandlerFunc(scrapePatchNotes), sparta.IAMRoleDefinition{})
 	lambdaFunctions = append(lambdaFunctions, scrapePatchNotesFn)
+
+	handleArticleFn := sparta.HandleAWSLambda("Handle New Articles", http.HandlerFunc(handleNewArticles), sparta.IAMRoleDefinition{})
+	dbStream := os.Getenv(envDynamoDBStream)
+	if dbStream == "" {
+		panic(envDynamoDBStreamErr)
+	}
+	handleArticleFn.EventSourceMappings = append(handleArticleFn.EventSourceMappings,
+		&sparta.EventSourceMapping{
+			EventSourceArn:   dbStream,
+			StartingPosition: "TRIM_HORIZON",
+			BatchSize:        10,
+		})
+	lambdaFunctions = append(lambdaFunctions, handleArticleFn)
 
 	if api != nil {
 		scrapeAllRes, _ := api.NewResource("/scrape/all", scrapeAllFn)

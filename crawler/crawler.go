@@ -4,7 +4,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"github.com/PuerkitoBio/goquery"
-	"github.com/sirupsen/logrus"
+	"github.com/Sirupsen/logrus"
 	"github.com/xeia/Kings-Raid-Crawler/models"
 	"io"
 	"regexp"
