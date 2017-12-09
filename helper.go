@@ -29,7 +29,7 @@ func discordHook(ev dynamodb.Event, logger *logrus.Logger) error {
 	}
 
 	msg := models.DiscordHookMessage{
-		Content: "Yoo-hoo! I found new update(s) on the PLUG cafe! I'll list them down below for y'all!",
+		Content: "Yoo-hoo! I found new update(s) on the PLUG cafe! I'll list them here for y'all!",
 		Embeds:  embeds,
 	}
 
@@ -127,15 +127,15 @@ func addArticlesToDB(articles []models.Article) ([]models.Article, error) {
 		// hackish conditional update to accomodate article revisions
 		var oldArticle models.Article
 		err := table.Get(models.ArticleIDCol, article.ID).One(&oldArticle)
-		if err == dynamo.ErrNotFound {
-			err = table.Put(article).If("attribute_not_exists($)", models.ArticleIDCol).Run()
+		if strings.Compare(err.Error(), dynamo.ErrNotFound.Error()) == 0 {
+			err = table.Put(article).If("attribute_not_exists(article-id)").Run()
 			if err != nil {
 				success = false
 			} else {
 				// may not be needed once streams are done
 				results = append(results, article)
 			}
-		} else if strings.Compare(oldArticle.Title, article.Title) != 0 {
+		} else if err == nil && strings.Compare(oldArticle.Title, article.Title) != 0 {
 			article.CreatedOn = oldArticle.CreatedOn
 			err = table.Put(article).Run()
 			if err != nil {

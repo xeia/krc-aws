@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	_ "github.com/joho/godotenv/autoload"
 	"github.com/Sirupsen/logrus"
 	"github.com/mweagle/Sparta"
 	"github.com/mweagle/Sparta/aws/dynamodb"
@@ -9,6 +10,7 @@ import (
 	"github.com/xeia/Kings-Raid-Crawler/models"
 	"net/http"
 	"os"
+	gocf "github.com/mweagle/go-cloudformation"
 )
 
 const (
@@ -208,22 +210,40 @@ func scrapePatchNotes(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func createLambdaOptions(desc string, timeout int64, env map[string]*gocf.StringExpr) *sparta.LambdaFunctionOptions {
+	return &sparta.LambdaFunctionOptions{
+		Description: desc,
+		MemorySize: 128,
+		Timeout: timeout,
+		Environment: env,
+	}
+}
+
 func spartaLambdaFunctions(api *sparta.API) []*sparta.LambdaAWSInfo {
 	var lambdaFunctions []*sparta.LambdaAWSInfo
+	envMap := make(map[string]*gocf.StringExpr)
+	envMap[envDynamoDBStream] = gocf.String(os.Getenv(envDynamoDBStream))
+	envMap[envDiscordHook] = gocf.String(os.Getenv(envDiscordHook))
+	envMap[envTelegram] = gocf.String(os.Getenv(envTelegram))
 
 	scrapeAllFn := sparta.HandleAWSLambda("Scrape All", http.HandlerFunc(scrapeAll), sparta.IAMRoleDefinition{})
+	scrapeAllFn.Options = createLambdaOptions("Scrapes PLUG cafe for notices/events/patch notes", 270, envMap)
 	lambdaFunctions = append(lambdaFunctions, scrapeAllFn)
 
 	scrapeEventsFn := sparta.HandleAWSLambda("Scrape Events", http.HandlerFunc(scrapeEvents), sparta.IAMRoleDefinition{})
+	scrapeEventsFn.Options = createLambdaOptions("Scrapes PLUG cafe for events", 150, envMap)
 	lambdaFunctions = append(lambdaFunctions, scrapeEventsFn)
 
 	scrapeNoticesFn := sparta.HandleAWSLambda("Scrape Notices", http.HandlerFunc(scrapeNotices), sparta.IAMRoleDefinition{})
+	scrapeNoticesFn.Options = createLambdaOptions("Scrapes PLUG cafe for notices", 150, envMap)
 	lambdaFunctions = append(lambdaFunctions, scrapeNoticesFn)
 
 	scrapePatchNotesFn := sparta.HandleAWSLambda("Scrape Patch Notes", http.HandlerFunc(scrapePatchNotes), sparta.IAMRoleDefinition{})
+	scrapePatchNotesFn.Options = createLambdaOptions("Scrapes PLUG cafe for patch notes", 150, envMap)
 	lambdaFunctions = append(lambdaFunctions, scrapePatchNotesFn)
 
 	handleArticleFn := sparta.HandleAWSLambda("Handle New Articles", http.HandlerFunc(handleNewArticles), sparta.IAMRoleDefinition{})
+	handleArticleFn.Options = createLambdaOptions("Handles updates from DB stream to be published", 150, envMap)
 	dbStream := os.Getenv(envDynamoDBStream)
 	if dbStream == "" {
 		panic(envDynamoDBStreamErr)
