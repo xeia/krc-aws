@@ -12,11 +12,18 @@ import (
 	"strings"
 )
 
+// PLUG cafe links
 const (
-	cafeBase      = "https://www.plug.game/kingsraid-en"
-	noticesUrl    = cafeBase + "/posts?menuId=1#"
-	eventsUrl     = cafeBase + "/posts?menuId=2#"
-	patchNotesUrl = cafeBase + "/posts?menuId=9#"
+	CafeBase            = "https://www.plug.game/kingsraid-en"
+	ShowNoticeFormat    = noticesUrl + "/posts/%d"
+	ShowEventFormat     = eventsUrl + "/posts/%d"
+	ShowPatchNoteFormat = patchNotesUrl + "/posts/%d"
+)
+
+const (
+	noticesUrl    = CafeBase + "/posts?menuId=1#"
+	eventsUrl     = CafeBase + "/posts?menuId=2#"
+	patchNotesUrl = CafeBase + "/posts?menuId=9#"
 
 	contentsSelector = "#data-container"
 	articlesSelector = ".frame_plug"
