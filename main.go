@@ -2,9 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"github.com/Sirupsen/logrus"
 	"github.com/mweagle/Sparta"
 	"github.com/mweagle/Sparta/aws/dynamodb"
-	"github.com/Sirupsen/logrus"
 	"github.com/xeia/Kings-Raid-Crawler/crawler"
 	"github.com/xeia/Kings-Raid-Crawler/models"
 	"net/http"
@@ -13,14 +13,14 @@ import (
 
 const (
 	envDynamoDBStream    = "DYNAMO_DBSTREAM"
-	envDynamoDBStreamErr = "Env DYNAMO_DBSTREAM does not exist"
+	envDynamoDBStreamErr = "env DYNAMO_DBSTREAM does not exist"
 
 	envDiscordHook    = "DISCORD_WEBHOOK"
-	envDiscordHookErr = "Env DISCORD_WEBHOOK does not exist"
+	envDiscordHookErr = "env DISCORD_WEBHOOK does not exist"
 	enableDiscordHook = true
 
 	envTelegram    = "TELEGRAM_TOKEN"
-	envTelegramErr = "Env TELEGRAM_TOKEN does not exist"
+	envTelegramErr = "env TELEGRAM_TOKEN does not exist"
 	enableTelegram = false
 )
 
@@ -54,15 +54,16 @@ func handleNewArticles(w http.ResponseWriter, r *http.Request) {
 
 	for _, rec := range lambdaEvent.Records {
 		logger.WithFields(logrus.Fields{
-			"Keys":     rec.DynamoDB.Keys,
 			"NewImage": rec.DynamoDB.NewImage,
 		}).Info("DynamoDB event")
 	}
 
 	if enableDiscordHook {
-		err := discordHook(lambdaEvent)
+		err = discordHook(lambdaEvent, logger)
 		if err != nil {
 			logger.Error("DiscordHook Error :", err.Error())
+		} else {
+			logger.Info("DiscordHook successfully sent!")
 		}
 	}
 

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"github.com/Sirupsen/logrus"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/guregu/dynamo"
 	"github.com/mweagle/Sparta/aws/dynamodb"
@@ -11,43 +13,102 @@ import (
 	"github.com/xeia/Kings-Raid-Crawler/models"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
 
-func discordHook(ev dynamodb.Event) error {
+func discordHook(ev dynamodb.Event, logger *logrus.Logger) error {
+	var embeds []models.DiscordEmbed
+	for _, rec := range ev.Records {
+		e, err := parseSingleRecord(rec)
+		if err != nil {
+			logger.Error(err)
+		}
+		embeds = append(embeds, e)
+	}
+
+	msg := models.DiscordHookMessage{
+		Content: "Yoo-hoo! I found new update(s) on the PLUG cafe! I'll list them down below for y'all!",
+		Embeds:  embeds,
+	}
+
+	jsonBytes, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+
+	return sendDiscordHook(jsonBytes)
+}
+
+func sendDiscordHook(b []byte) error {
 	dt := os.Getenv(envDiscordHook)
 	if dt == "" {
 		return errors.New(envDiscordHookErr)
 	}
 
-	var embed models.DiscordEmbed
-	embed.Title = "New updates from PLUG cafe"
-	embed.Description = "Yoo-hoo! I found new articles published on the PLUG cafe! I'll list them down below for y'all!"
-	embed.Color = 3447003
-	embed.URL = crawler.CafeBase
-
-	b, _ := json.Marshal(&ev)
-	embed.Fields = []models.DiscordField{
-		{Name: "Test", Value: string(b)},
-	}
-	msg := models.DiscordHookMessage{
-		Embeds: []models.DiscordEmbed{
-			embed,
-		},
-	}
-	jsonBytes, err := json.Marshal(msg)
+	req, err := http.NewRequest(http.MethodPost, dt, bytes.NewBuffer(b))
 	if err != nil {
-		panic(err)
+		return err
 	}
-	jsonBuf := bytes.NewBuffer(jsonBytes)
+	req.Header.Set("Content-Type", "application/json")
 
-	_, err = http.Post(dt, "application/json", jsonBuf)
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	defer resp.Body.Close()
 	if err != nil {
 		return err
 	}
 
+	if resp.StatusCode != http.StatusOK || resp.StatusCode != http.StatusNoContent {
+		return errors.New(fmt.Sprintf("Response code received: %d", resp.StatusCode))
+	}
 	return nil
+}
+
+func parseSingleRecord(rec dynamodb.EventRecord) (models.DiscordEmbed, error) {
+	var embed models.DiscordEmbed
+	embed.Title = *rec.DynamoDB.NewImage["article-title"].S
+	embed.Description = *rec.DynamoDB.NewImage["article-description"].S
+	embed.Thumbnail = models.DiscordThumbnail{URL: *rec.DynamoDB.NewImage["article-thumb-url"].S}
+
+	articleID, err := strconv.Atoi(*rec.DynamoDB.NewImage["article-id"].N)
+	if err != nil {
+		return embed, err
+	}
+
+	articleType, err := strconv.Atoi(*rec.DynamoDB.NewImage["article-type"].N)
+	if err != nil {
+		return embed, err
+	}
+
+	embed.URL = formatArticleURL(models.ArticleType(articleType), articleID)
+	embed.Color = generateColorCode(models.ArticleType(articleType))
+	return embed, nil
+}
+
+func formatArticleURL(at models.ArticleType, id int) string {
+	switch at {
+	case models.EVENTS:
+		return fmt.Sprintf(crawler.ShowEventFormat, id)
+	case models.NOTICE:
+		return fmt.Sprintf(crawler.ShowNoticeFormat, id)
+	case models.PATCHNOTES:
+		return fmt.Sprintf(crawler.ShowPatchNoteFormat, id)
+	}
+	return ""
+}
+
+func generateColorCode(at models.ArticleType) int {
+	switch at {
+	case models.EVENTS:
+		return 3447003
+	case models.NOTICE:
+		return 14382900
+	case models.PATCHNOTES:
+		return 3464055
+	}
+	return 14365765
 }
 
 func addArticlesToDB(articles []models.Article) ([]models.Article, error) {
