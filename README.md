@@ -7,23 +7,12 @@
 - Crawls for articles on the cafe every hour via a cron job
 - Store articles into AWS DynamoDB
 - Serverless implementation
-- When a new article is published, sends a Telegram message to all users with the link 
-- Telegram Bot commands to request for article in different categories
-
-## Todo
-- [x] Setup storage models
-- [x] Setup webpage crawl and parsing
-- [x] Setup cron worker
-- [x] Setup AWS credentials
-- [x] Setup serverless implementation
-- [ ] Get Telegram Bot credentials
-- [x] Deployment
+- When a new article is published, sends message to web hooks
 
 ## Setup
 ### Requirements
 - Golang 1.9
 - AWS Lambda, CloudWatch, DynamoDB
-- Telegram Bot
 - [Sparta](http://gosparta.io)
 - [goquery](https://godoc.org/github.com/PuerkitoBio/goquery)
 - Discord Webhook
@@ -42,7 +31,3 @@
 7. Go onto AWS and view the consoles for the relevant functions, making changes as necessary
 8. *(Optional)* Setup CloudWatch Alarm with a schedule to invoke ScrapeAll
 
-## Future
-- [ ] To add Discord functionalities
-- [ ] Add hero/uw details
-- [ ] Add artifact details

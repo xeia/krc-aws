@@ -2,15 +2,16 @@ package main
 
 import (
 	"encoding/json"
-	_ "github.com/joho/godotenv/autoload"
 	"github.com/Sirupsen/logrus"
+	_ "github.com/joho/godotenv/autoload"
 	"github.com/mweagle/Sparta"
 	"github.com/mweagle/Sparta/aws/dynamodb"
+	gocf "github.com/mweagle/go-cloudformation"
 	"github.com/xeia/Kings-Raid-Crawler/crawler"
 	"github.com/xeia/Kings-Raid-Crawler/models"
 	"net/http"
 	"os"
-	gocf "github.com/mweagle/go-cloudformation"
+	"strconv"
 )
 
 const (
@@ -73,12 +74,86 @@ func handleNewArticles(w http.ResponseWriter, r *http.Request) {
 		// todo
 	}
 
-	bytes, bytesErr := json.Marshal(&lambdaEvent)
-	if bytes != nil {
-		writeRespJSON(w, bytes)
-	} else {
-		writeRespHeaderWithMsg(w, http.StatusInternalServerError, bytesErr.Error())
+	writeRespHeaderWithMsg(w, http.StatusNoContent, "")
+}
+
+func queryAll(w http.ResponseWriter, r *http.Request) {
+	logger, _ := r.Context().Value(sparta.ContextKeyLogger).(*logrus.Logger)
+	lambdaContext, _ := r.Context().Value(sparta.ContextKeyLambdaContext).(*sparta.LambdaContext)
+	logger.WithFields(logrus.Fields{
+		"RequestID": lambdaContext.AWSRequestID,
+	}).Info(requestReceived)
+
+	res, err := getArticlesFromDB()
+	if err != nil {
+		writeRespHeaderWithMsg(w, http.StatusInternalServerError, err.Error())
 	}
+
+	b, err := json.Marshal(&res)
+	if err != nil {
+		writeRespHeaderWithMsg(w, http.StatusInternalServerError, err.Error())
+	}
+
+	writeRespJSON(w, b)
+}
+
+func queryByType(w http.ResponseWriter, r *http.Request) {
+	logger, _ := r.Context().Value(sparta.ContextKeyLogger).(*logrus.Logger)
+	lambdaContext, _ := r.Context().Value(sparta.ContextKeyLambdaContext).(*sparta.LambdaContext)
+	logger.WithFields(logrus.Fields{
+		"RequestID": lambdaContext.AWSRequestID,
+	}).Info(requestReceived)
+
+	var res []models.Article
+	t := r.URL.Query().Get("type")
+	limit := r.URL.Query().Get("limit")
+
+	at, err := convertURLReqType(t)
+	if err != nil || len(t) == 0 {
+		writeRespHeaderWithMsg(w, http.StatusBadRequest, "Missing or unknown article type found in request")
+	}
+
+	if len(limit) != 0 {
+		l, err := strconv.ParseInt(limit, 10, 64)
+		if err != nil {
+			writeRespHeaderWithMsg(w, http.StatusBadRequest, err.Error())
+		}
+
+		res, err = getLatestArticleByTypeFromDB(at, l)
+		if err != nil {
+			writeRespHeaderWithMsg(w, http.StatusInternalServerError, err.Error())
+		}
+	} else {
+		res, err = getLatestArticleByTypeFromDB(at, 1)
+		if err != nil {
+			writeRespHeaderWithMsg(w, http.StatusInternalServerError, err.Error())
+		}
+	}
+
+	b, err := json.Marshal(&res)
+	if err != nil {
+		writeRespHeaderWithMsg(w, http.StatusInternalServerError, err.Error())
+	}
+	writeRespJSON(w, b)
+}
+
+func queryLatest(w http.ResponseWriter, r *http.Request) {
+	logger, _ := r.Context().Value(sparta.ContextKeyLogger).(*logrus.Logger)
+	lambdaContext, _ := r.Context().Value(sparta.ContextKeyLambdaContext).(*sparta.LambdaContext)
+	logger.WithFields(logrus.Fields{
+		"RequestID": lambdaContext.AWSRequestID,
+	}).Info(requestReceived)
+
+	res, err := getLatestArticleFromDB()
+	if err != nil {
+		writeRespHeaderWithMsg(w, http.StatusInternalServerError, err.Error())
+	}
+
+	b, err := json.Marshal(&res)
+	if err != nil {
+		writeRespHeaderWithMsg(w, http.StatusInternalServerError, err.Error())
+	}
+	writeRespJSON(w, b)
 }
 
 func scrapeAll(w http.ResponseWriter, r *http.Request) {
@@ -213,8 +288,8 @@ func scrapePatchNotes(w http.ResponseWriter, r *http.Request) {
 func createLambdaOptions(desc string, timeout int64, env map[string]*gocf.StringExpr) *sparta.LambdaFunctionOptions {
 	return &sparta.LambdaFunctionOptions{
 		Description: desc,
-		MemorySize: 128,
-		Timeout: timeout,
+		MemorySize:  128,
+		Timeout:     timeout,
 		Environment: env,
 	}
 }
@@ -256,11 +331,23 @@ func spartaLambdaFunctions(api *sparta.API) []*sparta.LambdaAWSInfo {
 		})
 	lambdaFunctions = append(lambdaFunctions, handleArticleFn)
 
+	queryAllFn := sparta.HandleAWSLambda("Query All", http.HandlerFunc(queryAll), sparta.IAMRoleDefinition{})
+	queryAllFn.Options = createLambdaOptions("Queries the database to retrieve all articles", 30, envMap)
+	lambdaFunctions = append(lambdaFunctions, queryAllFn)
+
+	queryByTypeFn := sparta.HandleAWSLambda("Query By Type", http.HandlerFunc(queryAll), sparta.IAMRoleDefinition{})
+	queryByTypeFn.Options = createLambdaOptions("Queries the database to retrieve articles by type", 30, envMap)
+	lambdaFunctions = append(lambdaFunctions, queryByTypeFn)
+
+	queryLatestFn := sparta.HandleAWSLambda("Query Latest", http.HandlerFunc(queryAll), sparta.IAMRoleDefinition{})
+	queryLatestFn.Options = createLambdaOptions("Queries the database to retrieve the latest article", 10, envMap)
+	lambdaFunctions = append(lambdaFunctions, queryLatestFn)
+
 	if api != nil {
-		scrapeAllRes, _ := api.NewResource("/scrape/all", scrapeAllFn)
+		scrapeAllRes, _ := api.NewResource("/scrape", scrapeAllFn)
 		_, err := scrapeAllRes.NewMethod(http.MethodPost, http.StatusOK)
 		if err != nil {
-			panic("Failed to create /scrape/all resource")
+			panic("Failed to create /scrape resource")
 		}
 
 		scrapeEventRes, _ := api.NewResource("/scrape/events", scrapeEventsFn)
@@ -279,6 +366,24 @@ func spartaLambdaFunctions(api *sparta.API) []*sparta.LambdaAWSInfo {
 		_, err = scrapePatchRes.NewMethod(http.MethodPost, http.StatusOK)
 		if err != nil {
 			panic("Failed to create /scrape/patch resource")
+		}
+
+		queryAllRes, _ := api.NewResource("/get/all", queryAllFn)
+		_, err = queryAllRes.NewMethod(http.MethodGet, http.StatusOK)
+		if err != nil {
+			panic("Failed to create /get/all resource")
+		}
+
+		queryLatestRes, _ := api.NewResource("/get/latest", queryLatestFn)
+		_, err = queryLatestRes.NewMethod(http.MethodGet, http.StatusOK)
+		if err != nil {
+			panic("Failed to create /get/latest resource")
+		}
+
+		queryByTypeRes, _ := api.NewResource("/get", queryByTypeFn)
+		_, err = queryByTypeRes.NewMethod(http.MethodGet, http.StatusOK)
+		if err != nil {
+			panic("Failed to create /get resource")
 		}
 	}
 

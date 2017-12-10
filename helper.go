@@ -11,6 +11,7 @@ import (
 	"github.com/mweagle/Sparta/aws/dynamodb"
 	"github.com/xeia/Kings-Raid-Crawler/crawler"
 	"github.com/xeia/Kings-Raid-Crawler/models"
+	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
@@ -29,7 +30,7 @@ func discordHook(ev dynamodb.Event, logger *logrus.Logger) error {
 	}
 
 	msg := models.DiscordHookMessage{
-		Content: "Yoo-hoo! I found new update(s) on the PLUG cafe! I'll list them here for y'all!",
+		Content: generateContentString(),
 		Embeds:  embeds,
 	}
 
@@ -46,8 +47,11 @@ func sendDiscordHook(b []byte) error {
 	if dt == "" {
 		return errors.New(envDiscordHookErr)
 	}
+	return sendHook(dt, b)
+}
 
-	req, err := http.NewRequest(http.MethodPost, dt, bytes.NewBuffer(b))
+func sendHook(url string, b []byte) error {
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(b))
 	if err != nil {
 		return err
 	}
@@ -99,6 +103,7 @@ func formatArticleURL(at models.ArticleType, id int) string {
 	return ""
 }
 
+// generateColorCode generates color codes in decimal for different category
 func generateColorCode(at models.ArticleType) int {
 	switch at {
 	case models.EVENTS:
@@ -109,6 +114,15 @@ func generateColorCode(at models.ArticleType) int {
 		return 3464055
 	}
 	return 14365765
+}
+
+// generateContentString returns a randomized string to be used in the discord message
+func generateContentString() string {
+	s := []string{
+		"Yoo-hoo! I found a new update on the PLUG cafe! I'll list them here for y'all!",
+		"Yippe! New updates from the PLUG cafe!",
+	}
+	return s[rand.Intn(len(s))]
 }
 
 func addArticlesToDB(articles []models.Article) ([]models.Article, error) {
@@ -152,6 +166,59 @@ func addArticlesToDB(articles []models.Article) ([]models.Article, error) {
 	return results, errors.New(dbWriteErr)
 }
 
+func getArticlesFromDB() ([]models.Article, error) {
+	sess := session.Must(session.NewSession())
+	db := dynamo.New(sess)
+
+	var res []models.Article
+	aTable := db.Table(models.ArticleTable)
+	err := aTable.Scan().All(&res)
+	return res, err
+}
+
+func getLatestArticleByTypeFromDB(at models.ArticleType, limit int64) ([]models.Article, error) {
+	sess := session.Must(session.NewSession())
+	db := dynamo.New(sess)
+
+	aTable := db.Table(models.ArticleTable)
+	asTable := db.Table(models.ArticleStateTable)
+	var as models.ArticleState
+	var res []models.Article
+
+	err := asTable.Get(models.ArticleStateTypeCol, at).One(&as)
+	if err != nil {
+		return res, err
+	}
+
+	err = aTable.Get(models.ArticleIDCol, as.ID).Limit(limit).All(&res)
+	return res, err
+}
+
+func getLatestArticleFromDB() (models.Article, error) {
+	sess := session.Must(session.NewSession())
+	db := dynamo.New(sess)
+
+	aTable := db.Table(models.ArticleTable)
+	asTable := db.Table(models.ArticleStateTable)
+	var all []models.ArticleState
+	var a models.Article
+
+	err := asTable.Scan().All(&all)
+	if err != nil {
+		return a, err
+	}
+
+	max := -1
+	for _, as := range all {
+		if as.ID > max {
+			max = as.ID
+		}
+	}
+
+	err = aTable.Get(models.ArticleIDCol, max).One(&a)
+	return a, err
+}
+
 // isArticleStateUnchanged returns true if the articleHash is the same as
 // the currently stored one in the DB for the given articleType
 func isArticleStateUnchanged(articleHash string, articleType models.ArticleType, articleId int) bool {
@@ -183,6 +250,23 @@ func getLargestID(articles []models.Article) int {
 		}
 	}
 	return v
+}
+
+func convertURLReqType(a string) (models.ArticleType, error) {
+	switch strings.ToLower(a) {
+	case "event":
+	case "events":
+		return models.EVENTS, nil
+	case "notice":
+	case "notices":
+		return models.NOTICE, nil
+	case "patch":
+	case "patchnotes":
+	case "patch_notes":
+	case "patch-notes":
+		return models.PATCHNOTES, nil
+	}
+	return models.NOTICE, errors.New("No known article-type found")
 }
 
 func writeRespHeaderWithMsg(w http.ResponseWriter, status int, message string) {
