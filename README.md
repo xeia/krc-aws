@@ -21,8 +21,11 @@
 0. Setup requirements and provision the necessary roles/policies on AWS
 1. Clone this repo
 2. Create a `.env` file with the following fields:
-> DISCORD_WEBHOOK=<WEBHOOK_URL>
-> DYNAMODB_DBSTREAM=<DYNAMODB_STREAM_ARN>
+```
+DISCORD_WEBHOOK=<WEBHOOK_URL>
+DYNAMODB_DBSTREAM=<DYNAMODB_STREAM_ARN>
+```
+
 3. Enable/Disable Discord/Telegram functionalities
 4. Modify the IAM definitions for the functions to those that you have provisioned
 5. Setup a S3 Bucket for code storage and store as $S3_BUCKET
