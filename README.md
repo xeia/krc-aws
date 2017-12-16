@@ -1,7 +1,9 @@
-# Kings-Raid-Crawler
+# krc-aws
 > Late in getting notices and lazy in browsing to the cafe?<br>
 > Or tired of refreshing the cafe every Tuesday for the maintenance notice or every Thursday for the patch notes?<br>
 > Perhaps its better to save time for raiding and let the crawling do the job!
+
+**not actively maintained*
 
 ## Features
 - Crawls for articles on the cafe every hour via a cron job
@@ -26,7 +28,7 @@ DISCORD_WEBHOOK=<WEBHOOK_URL>
 DYNAMODB_DBSTREAM=<DYNAMODB_STREAM_ARN>
 ```
 
-3. Enable/Disable Discord/Telegram functionalities
+3. Enable/Disable Discord functionalities
 4. Modify the IAM definitions for the functions to those that you have provisioned
 5. Setup a S3 Bucket for code storage and store as $S3_BUCKET
 6. Run the provision command:
